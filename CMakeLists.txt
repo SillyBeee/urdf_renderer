@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(urdf_viewer)
+project(urdf_renderer)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,22 +24,22 @@ set(urdf_model_LIBRARIES ${urdfdom_LIBRARIES})
 set(urdf_model_INCLUDE_DIRS ${urdfdom_INCLUDE_DIRS})
 
 # Build shared library plugin
-add_library(urdf_viewer_plugin SHARED
+add_library(urdf_renderer_plugin SHARED
     urdf_loader.cpp
-    urdf_viewer_plugin.cpp
-    urdf_viewer_plugin_c.cpp
+    urdf_renderer_plugin.cpp
+    urdf_renderer_plugin_c.cpp
 )
 
-target_compile_definitions(urdf_viewer_plugin PRIVATE URDF_PLUGIN_EXPORTS)
+target_compile_definitions(urdf_renderer_plugin PRIVATE URDF_PLUGIN_EXPORTS)
 
 # Enable OpenCV support if available
 if(HAVE_OPENCV)
-    target_compile_definitions(urdf_viewer_plugin PRIVATE HAVE_OPENCV)
-    target_include_directories(urdf_viewer_plugin PRIVATE ${OpenCV_INCLUDE_DIRS})
-    target_link_libraries(urdf_viewer_plugin PRIVATE opencv_core)
+    target_compile_definitions(urdf_renderer_plugin PRIVATE HAVE_OPENCV)
+    target_include_directories(urdf_renderer_plugin PRIVATE ${OpenCV_INCLUDE_DIRS})
+    target_link_libraries(urdf_renderer_plugin PRIVATE opencv_core)
 endif()
 
-target_include_directories(urdf_viewer_plugin PUBLIC
+target_include_directories(urdf_renderer_plugin PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${OGRE_INCLUDE_DIRS} 
     ${ASSIMP_INCLUDE_DIRS} 
@@ -47,7 +47,7 @@ target_include_directories(urdf_viewer_plugin PUBLIC
     ${urdf_model_INCLUDE_DIRS}
 )
 
-target_link_libraries(urdf_viewer_plugin PUBLIC
+target_link_libraries(urdf_renderer_plugin PUBLIC
     ${OGRE_LIBRARIES}
     ${urdfdom_LIBRARIES}
     ${urdf_model_LIBRARIES}
@@ -55,15 +55,15 @@ target_link_libraries(urdf_viewer_plugin PUBLIC
     Threads::Threads
 )
 
-set_target_properties(urdf_viewer_plugin PROPERTIES
+set_target_properties(urdf_renderer_plugin PROPERTIES
     VERSION 1.0.0
     SOVERSION 1
-    PUBLIC_HEADER "urdf_viewer_plugin.h"
+    PUBLIC_HEADER "urdf_renderer_plugin.h"
 )
 
 
 # Install targets
-install(TARGETS urdf_viewer_plugin
+install(TARGETS urdf_renderer_plugin
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin
@@ -72,19 +72,19 @@ install(TARGETS urdf_viewer_plugin
 
 # Build C example
 add_executable(example_c examples/example_c.c)
-target_link_libraries(example_c urdf_viewer_plugin)
+target_link_libraries(example_c urdf_renderer_plugin)
 target_include_directories(example_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Build video generator
 add_executable(video_generator examples/video_generator.c)
-target_link_libraries(video_generator urdf_viewer_plugin m)
+target_link_libraries(video_generator urdf_renderer_plugin m)
 target_include_directories(video_generator PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Build OpenCV example (if OpenCV is available)
 if(HAVE_OPENCV)
     add_executable(example_opencv examples/example_opencv.cpp)
     target_compile_definitions(example_opencv PRIVATE HAVE_OPENCV)
-    target_link_libraries(example_opencv urdf_viewer_plugin opencv_core opencv_imgproc opencv_imgcodecs)
+    target_link_libraries(example_opencv urdf_renderer_plugin opencv_core opencv_imgproc opencv_imgcodecs)
     target_include_directories(example_opencv PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${OpenCV_INCLUDE_DIRS})
     message(STATUS "Building example_opencv with OpenCV support")
 endif()

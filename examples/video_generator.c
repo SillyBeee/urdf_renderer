@@ -1,4 +1,4 @@
-#include "urdf_viewer_plugin.h"
+#include "urdf_renderer_plugin.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -64,10 +64,12 @@ int main(int argc, char** argv) {
     
     // Set camera
     UrdfCameraConfig cam = {
-        {2.0f, 2.0f, 1.5f},
-        {0.0f, 0.0f, 0.4f},
-        {0.0f, 0.0f, 1.0f},
-        50.0f, 0.1f, 1000.0f
+        .position = {-0.02f, 0.0f, 1.5f},
+        .look_at = {0.0f, 0.1f, 0.9f},
+        .up = {0.0f, 0.0f, 1.0f},
+        .fov_degrees = 45.0f,
+        .near_clip = 0.1f,
+        .far_clip = 1000.0f
     };
     urdf_plugin_set_camera(plugin, &cam);
     

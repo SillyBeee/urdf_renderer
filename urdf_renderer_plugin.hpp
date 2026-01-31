@@ -1,6 +1,6 @@
 /**
- * @file urdf_viewer_plugin.hpp
- * @brief URDF查看器插件C++实现类
+ * @file urdf_renderer_plugin.hpp
+ * @brief URDF渲染器插件C++实现类
  * @details 提供完整的URDF模型渲染功能，包括正向运动学、材质管理、
  *          透明背景渲染、图像输出等。使用OGRE引擎进行3D渲染。
  * @author SillyBee
@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include "urdf_viewer_plugin.h"
+#include "urdf_renderer_plugin.h"
 #include "urdf_loader.hpp"
 #include <Ogre.h>
 #include <memory>
@@ -24,8 +24,8 @@
 #endif
 
 /**
- * @class URDFViewerPlugin
- * @brief URDF查看器插件主类
+ * @class URDFRendererPlugin
+ * @brief URDF渲染器插件主类
  * @details 封装了URDF模型的完整渲染管线，包括：
  *          - OGRE渲染引擎初始化和管理
  *          - URDF模型加载和场景构建
@@ -35,19 +35,19 @@
  * 
  * @note 线程安全：大部分操作需要在创建插件的同一线程调用
  */
-class URDFViewerPlugin {
+class URDFRendererPlugin {
 public:
     /**
      * @brief 构造函数
      * @details 初始化成员变量，设置默认相机和渲染配置
      */
-    URDFViewerPlugin();
+    URDFRendererPlugin();
     
     /**
      * @brief 析构函数
      * @details 自动调用shutdown()清理所有资源
      */
-    ~URDFViewerPlugin();
+    ~URDFRendererPlugin();
 
     // ========================================================================
     // 初始化和清理
@@ -413,6 +413,7 @@ private:
     // 场景图映射
     // ========================================================================
     std::unordered_map<std::string, Ogre::SceneNode*> link_nodes_;  ///< 连杆名到场景节点的映射
+    Ogre::SceneNode* robot_root_node_;                                 ///< 机器人根节点（用于坐标系修正）
     
     // ========================================================================
     // 正向运动学数据结构

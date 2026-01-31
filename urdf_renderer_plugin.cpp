@@ -1,4 +1,4 @@
-#include "urdf_viewer_plugin.hpp"
+#include "urdf_renderer_plugin.hpp"
 #include <urdf_parser/urdf_parser.h>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
@@ -8,11 +8,12 @@
 #include <set>
 #include <algorithm>
 
-URDFViewerPlugin::URDFViewerPlugin()
+URDFRendererPlugin::URDFRendererPlugin()
     : ogre_root_(nullptr)
     , scene_mgr_(nullptr)
     , camera_(nullptr)
     , render_texture_(nullptr)
+    , robot_root_node_(nullptr)
     , image_width_(800)
     , image_height_(600)
     , initialized_(false)
@@ -20,20 +21,19 @@ URDFViewerPlugin::URDFViewerPlugin()
     , continuous_render_(false)
     , target_fps_(30)
 {
-    // Default camera config - 调整为正视机械臂竖立
-    // 相机位置在前方稍高处，俯视角度观察
-    camera_config_.position[0] = 1.5f;  // X轴前方
-    camera_config_.position[1] = 1.5f;  // Y轴侧方
-    camera_config_.position[2] = 1.2f;  // Z轴稍高
+    // Default camera config - 优化为机械臂充满画面
+    camera_config_.position[0] = 0.22f;
+    camera_config_.position[1] = 0.10f;
+    camera_config_.position[2] = 0.16f;
     camera_config_.look_at[0] = 0.0f;
     camera_config_.look_at[1] = 0.0f;
-    camera_config_.look_at[2] = 0.3f;   // 看向机械臂中部
+    camera_config_.look_at[2] = 0.11f;
     camera_config_.up[0] = 0.0f;
     camera_config_.up[1] = 0.0f;
-    camera_config_.up[2] = 1.0f;        // Z轴向上
-    camera_config_.fov_degrees = 45.0f;
-    camera_config_.near_clip = 0.1f;
-    camera_config_.far_clip = 1000.0f;
+    camera_config_.up[2] = 1.0f;
+    camera_config_.fov_degrees = 22.0f;
+    camera_config_.near_clip = 0.02f;
+    camera_config_.far_clip = 5.0f;
 
     // Default render config
     render_config_.width = 800;
@@ -46,11 +46,11 @@ URDFViewerPlugin::URDFViewerPlugin()
     render_config_.anti_aliasing = 0;
 }
 
-URDFViewerPlugin::~URDFViewerPlugin() {
+URDFRendererPlugin::~URDFRendererPlugin() {
     shutdown();
 }
 
-bool URDFViewerPlugin::initialize(const UrdfRenderConfig* config) {
+bool URDFRendererPlugin::initialize(const UrdfRenderConfig* config) {
     if (initialized_) {
         setError("Plugin already initialized");
         return false;
@@ -70,7 +70,7 @@ bool URDFViewerPlugin::initialize(const UrdfRenderConfig* config) {
     return true;
 }
 
-bool URDFViewerPlugin::initializeOgre() {
+bool URDFRendererPlugin::initializeOgre() {
     try {
         // Create plugins.cfg if it doesn't exist
         std::ofstream plugins_cfg("plugins_headless.cfg");
@@ -96,34 +96,48 @@ bool URDFViewerPlugin::initializeOgre() {
         
         ogre_root_->setRenderSystem(render_system);
 
-        // Create a minimal hidden window for GL context
+        // Create a minimal hidden window for GL context (truly headless)
         Ogre::NameValuePairList params;
         params["hidden"] = "true";
         params["FSAA"] = "0";
         params["vsync"] = "false";
+        params["border"] = "none";
+        params["left"] = "-10000";   // Position off-screen
+        params["top"] = "-10000";
         
-        Ogre::RenderWindow* window = ogre_root_->initialise(true, "URDFViewerHiddenWindow");
+        ogre_root_->initialise(false);  // Don't create window automatically
+        Ogre::RenderWindow* window = ogre_root_->createRenderWindow(
+            "URDFRendererHiddenWindow", 1, 1, false, &params);  // 1x1 pixel, not fullscreen
+        window->setVisible(false);
+        window->setAutoUpdated(false);
 
         // Create scene manager
-        scene_mgr_ = ogre_root_->createSceneManager(Ogre::ST_GENERIC);
+        scene_mgr_ = ogre_root_->createSceneManager("DefaultSceneManager", "MainSceneManager");
 
         // Create camera
         camera_ = scene_mgr_->createCamera("MainCamera");
         camera_->setNearClipDistance(camera_config_.near_clip);
         camera_->setFarClipDistance(camera_config_.far_clip);
         camera_->setFOVy(Ogre::Degree(camera_config_.fov_degrees));
-        camera_->setPosition(camera_config_.position[0], 
+
+        Ogre::SceneNode* camNode = scene_mgr_->getRootSceneNode()->createChildSceneNode("MainCameraNode");
+        camNode->attachObject(camera_);
+        camNode->setPosition(camera_config_.position[0], 
                             camera_config_.position[1], 
                             camera_config_.position[2]);
-        camera_->lookAt(camera_config_.look_at[0], 
+        camNode->lookAt(Ogre::Vector3(camera_config_.look_at[0], 
                        camera_config_.look_at[1], 
-                       camera_config_.look_at[2]);
+                       camera_config_.look_at[2]), Ogre::Node::TS_WORLD);
 
         // Set up lighting
         scene_mgr_->setAmbientLight(Ogre::ColourValue(0.8f, 0.8f, 0.8f));
         Ogre::Light* light = scene_mgr_->createLight("MainLight");
         light->setType(Ogre::Light::LT_DIRECTIONAL);
-        light->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
+        
+        Ogre::SceneNode* lightNode = scene_mgr_->getRootSceneNode()->createChildSceneNode("MainLightNode");
+        lightNode->attachObject(light);
+        lightNode->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
+
         light->setDiffuseColour(Ogre::ColourValue::White);
         light->setSpecularColour(Ogre::ColourValue(0.4f, 0.4f, 0.4f));
 
@@ -149,7 +163,7 @@ bool URDFViewerPlugin::initializeOgre() {
     }
 }
 
-bool URDFViewerPlugin::createRenderTexture() {
+bool URDFRendererPlugin::createRenderTexture() {
     try {
         // Create texture for rendering
         Ogre::PixelFormat pixel_format = render_config_.transparent_background 
@@ -192,7 +206,7 @@ bool URDFViewerPlugin::createRenderTexture() {
     }
 }
 
-void URDFViewerPlugin::shutdown() {
+void URDFRendererPlugin::shutdown() {
     if (continuous_render_) {
         stopContinuousRender();
     }
@@ -222,7 +236,7 @@ void URDFViewerPlugin::shutdown() {
     model_loaded_ = false;
 }
 
-UrdfPluginError URDFViewerPlugin::loadURDF(const std::string& path) {
+UrdfPluginError URDFRendererPlugin::loadURDF(const std::string& path) {
     if (!initialized_) {
         setError("Plugin not initialized");
         return URDF_ERROR_INIT_FAILED;
@@ -241,8 +255,23 @@ UrdfPluginError URDFViewerPlugin::loadURDF(const std::string& path) {
     scene_mgr_->setAmbientLight(Ogre::ColourValue(0.8f, 0.8f, 0.8f));
     Ogre::Light* light = scene_mgr_->createLight("MainLight");
     light->setType(Ogre::Light::LT_DIRECTIONAL);
-    light->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
+
+    Ogre::SceneNode* lightNode = scene_mgr_->getRootSceneNode()->createChildSceneNode("MainLightNode");
+    lightNode->attachObject(light);
+    lightNode->setDirection(Ogre::Vector3(-1, -1, -1).normalisedCopy());
+
     light->setDiffuseColour(Ogre::ColourValue::White);
+
+    if (camera_) {
+        Ogre::SceneNode* camNode = scene_mgr_->getRootSceneNode()->createChildSceneNode("MainCameraNode");
+        camNode->attachObject(camera_);
+        camNode->setPosition(camera_config_.position[0], 
+                            camera_config_.position[1], 
+                            camera_config_.position[2]);
+        camNode->lookAt(Ogre::Vector3(camera_config_.look_at[0], 
+                       camera_config_.look_at[1], 
+                       camera_config_.look_at[2]), Ogre::Node::TS_WORLD);
+    }
 
     // Setup resource locations
     if (const auto dir = urdf_loader_.getURDFDirectory()) {
@@ -287,7 +316,7 @@ UrdfPluginError URDFViewerPlugin::loadURDF(const std::string& path) {
 }
 
 // Helper function to load mesh using assimp and create OGRE manual mesh
-Ogre::MeshPtr URDFViewerPlugin::loadMeshWithAssimp(const std::string& filepath, const std::string& mesh_name) {
+Ogre::MeshPtr URDFRendererPlugin::loadMeshWithAssimp(const std::string& filepath, const std::string& mesh_name) {
     std::cout << "Loading mesh with assimp: " << filepath << std::endl;
     
     Assimp::Importer importer;
@@ -391,7 +420,13 @@ Ogre::MeshPtr URDFViewerPlugin::loadMeshWithAssimp(const std::string& filepath, 
     return ogreMesh;
 }
 
-void URDFViewerPlugin::setupScene() {
+void URDFRendererPlugin::setupScene() {
+    // Create robot root node for coordinate system correction
+    robot_root_node_ = scene_mgr_->getRootSceneNode()->createChildSceneNode("robot_root");
+    
+    // Rotate -90 degrees around X-axis to make the arm stand upright with base at bottom
+    robot_root_node_->setOrientation(Ogre::Quaternion(Ogre::Degree(-90), Ogre::Vector3::UNIT_X));
+    
     const auto link_names = urdf_loader_.getLinkNames();
     
     // Collect all unique mesh directories to register
@@ -404,8 +439,8 @@ void URDFViewerPlugin::setupScene() {
             continue;
         }
 
-        // Create a scene node for this link
-        Ogre::SceneNode* link_node = scene_mgr_->getRootSceneNode()->createChildSceneNode(link_name);
+        // Create a scene node for this link under robot root
+        Ogre::SceneNode* link_node = robot_root_node_->createChildSceneNode(link_name);
         link_nodes_[link_name] = link_node;
 
         for (size_t idx = 0; idx < visuals.size(); ++idx) {
@@ -517,19 +552,19 @@ void URDFViewerPlugin::setupScene() {
     applyJointTransforms();
 }
 
-std::string URDFViewerPlugin::getModelName() const {
+std::string URDFRendererPlugin::getModelName() const {
     return urdf_loader_.getModelName();
 }
 
-size_t URDFViewerPlugin::getJointCount() const {
+size_t URDFRendererPlugin::getJointCount() const {
     return urdf_loader_.getJointNames().size();
 }
 
-std::vector<std::string> URDFViewerPlugin::getJointNames() const {
+std::vector<std::string> URDFRendererPlugin::getJointNames() const {
     return urdf_loader_.getJointNames();
 }
 
-UrdfPluginError URDFViewerPlugin::getJointInfo(const std::string& name, UrdfJointInfo* info) const {
+UrdfPluginError URDFRendererPlugin::getJointInfo(const std::string& name, UrdfJointInfo* info) const {
     if (!model_loaded_) {
         return URDF_ERROR_NO_MODEL_LOADED;
     }
@@ -563,7 +598,7 @@ UrdfPluginError URDFViewerPlugin::getJointInfo(const std::string& name, UrdfJoin
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::setJointAngle(const std::string& name, double angle) {
+UrdfPluginError URDFRendererPlugin::setJointAngle(const std::string& name, double angle) {
     if (!model_loaded_) {
         return URDF_ERROR_NO_MODEL_LOADED;
     }
@@ -576,7 +611,7 @@ UrdfPluginError URDFViewerPlugin::setJointAngle(const std::string& name, double 
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::getJointAngle(const std::string& name, double* angle) const {
+UrdfPluginError URDFRendererPlugin::getJointAngle(const std::string& name, double* angle) const {
     if (!model_loaded_) {
         return URDF_ERROR_NO_MODEL_LOADED;
     }
@@ -594,7 +629,7 @@ UrdfPluginError URDFViewerPlugin::getJointAngle(const std::string& name, double*
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::setMultipleJoints(
+UrdfPluginError URDFRendererPlugin::setMultipleJoints(
     const std::vector<std::string>& names,
     const std::vector<double>& angles) {
     
@@ -616,7 +651,7 @@ UrdfPluginError URDFViewerPlugin::setMultipleJoints(
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::resetJoints() {
+UrdfPluginError URDFRendererPlugin::resetJoints() {
     if (!model_loaded_) {
         return URDF_ERROR_NO_MODEL_LOADED;
     }
@@ -630,7 +665,7 @@ UrdfPluginError URDFViewerPlugin::resetJoints() {
     return URDF_SUCCESS;
 }
 
-void URDFViewerPlugin::applyJointTransforms() {
+void URDFRendererPlugin::applyJointTransforms() {
     // Apply forward kinematics to all links
     for (const auto& [link_name, node] : link_nodes_) {
         Ogre::Matrix4 transform = Ogre::Matrix4::IDENTITY;
@@ -638,14 +673,14 @@ void URDFViewerPlugin::applyJointTransforms() {
         
         // Extract position and orientation from matrix
         Ogre::Vector3 position = transform.getTrans();
-        Ogre::Quaternion orientation = transform.extractQuaternion();
+        Ogre::Quaternion orientation(transform.linear());
         
         node->setPosition(position);
         node->setOrientation(orientation);
     }
 }
 
-void URDFViewerPlugin::buildJointTree() {
+void URDFRendererPlugin::buildJointTree() {
     if (!urdf_loader_.model) return;
     
     joint_to_child_link_.clear();
@@ -661,7 +696,7 @@ void URDFViewerPlugin::buildJointTree() {
     std::cout << "Built joint tree with " << joint_to_child_link_.size() << " joints" << std::endl;
 }
 
-void URDFViewerPlugin::computeLinkTransform(const std::string& link_name, Ogre::Matrix4& transform) {
+void URDFRendererPlugin::computeLinkTransform(const std::string& link_name, Ogre::Matrix4& transform) {
     if (!urdf_loader_.model) {
         transform = Ogre::Matrix4::IDENTITY;
         return;
@@ -722,7 +757,7 @@ void URDFViewerPlugin::computeLinkTransform(const std::string& link_name, Ogre::
     transform = parent_transform * origin_transform * joint_rotation;
 }
 
-UrdfPluginError URDFViewerPlugin::setCamera(const UrdfCameraConfig& config) {
+UrdfPluginError URDFRendererPlugin::setCamera(const UrdfCameraConfig& config) {
     if (!initialized_) {
         return URDF_ERROR_INIT_FAILED;
     }
@@ -730,8 +765,11 @@ UrdfPluginError URDFViewerPlugin::setCamera(const UrdfCameraConfig& config) {
     camera_config_ = config;
 
     if (camera_) {
-        camera_->setPosition(config.position[0], config.position[1], config.position[2]);
-        camera_->lookAt(config.look_at[0], config.look_at[1], config.look_at[2]);
+        Ogre::SceneNode* camNode = camera_->getParentSceneNode();
+        if (camNode) {
+            camNode->setPosition(config.position[0], config.position[1], config.position[2]);
+            camNode->lookAt(Ogre::Vector3(config.look_at[0], config.look_at[1], config.look_at[2]), Ogre::Node::TS_WORLD);
+        }
         camera_->setFOVy(Ogre::Degree(config.fov_degrees));
         camera_->setNearClipDistance(config.near_clip);
         camera_->setFarClipDistance(config.far_clip);
@@ -740,7 +778,7 @@ UrdfPluginError URDFViewerPlugin::setCamera(const UrdfCameraConfig& config) {
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::getCamera(UrdfCameraConfig* config) const {
+UrdfPluginError URDFRendererPlugin::getCamera(UrdfCameraConfig* config) const {
     if (!config) {
         return URDF_ERROR_INVALID_PARAMETER;
     }
@@ -749,7 +787,7 @@ UrdfPluginError URDFViewerPlugin::getCamera(UrdfCameraConfig* config) const {
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::setRenderConfig(const UrdfRenderConfig& config) {
+UrdfPluginError URDFRendererPlugin::setRenderConfig(const UrdfRenderConfig& config) {
     if (!initialized_) {
         return URDF_ERROR_INIT_FAILED;
     }
@@ -780,7 +818,7 @@ UrdfPluginError URDFViewerPlugin::setRenderConfig(const UrdfRenderConfig& config
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::renderFrame() {
+UrdfPluginError URDFRendererPlugin::renderFrame() {
     if (!initialized_) {
         return URDF_ERROR_INIT_FAILED;
     }
@@ -801,7 +839,7 @@ UrdfPluginError URDFViewerPlugin::renderFrame() {
     }
 }
 
-void URDFViewerPlugin::captureFrameBuffer() {
+void URDFRendererPlugin::captureFrameBuffer() {
     const size_t channels = render_config_.transparent_background ? 4 : 3;
     const size_t buffer_size = image_width_ * image_height_ * channels;
     
@@ -812,10 +850,10 @@ void URDFViewerPlugin::captureFrameBuffer() {
         : Ogre::PF_BYTE_RGB;
 
     Ogre::PixelBox pixel_box(image_width_, image_height_, 1, pixel_format, image_buffer_.data());
-    render_texture_->copyContentsToMemory(pixel_box, Ogre::RenderTarget::FB_AUTO);
+    render_texture_->copyContentsToMemory(Ogre::Box(0, 0, image_width_, image_height_), pixel_box, Ogre::RenderTarget::FB_AUTO);
 }
 
-UrdfPluginError URDFViewerPlugin::startContinuousRender(uint32_t target_fps) {
+UrdfPluginError URDFRendererPlugin::startContinuousRender(uint32_t target_fps) {
     if (!initialized_ || !model_loaded_) {
         return URDF_ERROR_INIT_FAILED;
     }
@@ -829,16 +867,16 @@ UrdfPluginError URDFViewerPlugin::startContinuousRender(uint32_t target_fps) {
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::stopContinuousRender() {
+UrdfPluginError URDFRendererPlugin::stopContinuousRender() {
     continuous_render_ = false;
     return URDF_SUCCESS;
 }
 
-bool URDFViewerPlugin::isRendering() const {
+bool URDFRendererPlugin::isRendering() const {
     return continuous_render_;
 }
 
-UrdfPluginError URDFViewerPlugin::getImageBuffer(UrdfImageData* image_data) {
+UrdfPluginError URDFRendererPlugin::getImageBuffer(UrdfImageData* image_data) {
     if (!image_data) {
         return URDF_ERROR_INVALID_PARAMETER;
     }
@@ -860,13 +898,13 @@ UrdfPluginError URDFViewerPlugin::getImageBuffer(UrdfImageData* image_data) {
     return URDF_SUCCESS;
 }
 
-UrdfPluginError URDFViewerPlugin::saveImage(const std::string& path, UrdfImageFormat format) {
+UrdfPluginError URDFRendererPlugin::saveImage(const std::string& path, UrdfImageFormat format) {
     // TODO: Implement image saving with libpng/libjpeg in Phase 2
     setError("Image saving not yet implemented");
     return URDF_ERROR_NOT_IMPLEMENTED;
 }
 
-UrdfPluginError URDFViewerPlugin::copyImageBuffer(uint8_t* buffer, size_t buffer_size, size_t* bytes_written) {
+UrdfPluginError URDFRendererPlugin::copyImageBuffer(uint8_t* buffer, size_t buffer_size, size_t* bytes_written) {
     if (!buffer || !bytes_written) {
         return URDF_ERROR_INVALID_PARAMETER;
     }
@@ -886,7 +924,7 @@ UrdfPluginError URDFViewerPlugin::copyImageBuffer(uint8_t* buffer, size_t buffer
 }
 
 #ifdef HAVE_OPENCV
-cv::Mat URDFViewerPlugin::getImageAsMat() const {
+cv::Mat URDFRendererPlugin::getImageAsMat() const {
     // 检查是否有有效的图像数据
     if (image_buffer_.empty()) {
         throw std::runtime_error("No image available. Call renderFrame() first.");
@@ -911,12 +949,12 @@ cv::Mat URDFViewerPlugin::getImageAsMat() const {
 }
 #endif
 
-void URDFViewerPlugin::setError(const std::string& error) {
+void URDFRendererPlugin::setError(const std::string& error) {
     last_error_ = error;
-    std::cerr << "URDFViewerPlugin Error: " << error << std::endl;
+    std::cerr << "URDFRendererPlugin Error: " << error << std::endl;
 }
 
-Ogre::SceneNode* URDFViewerPlugin::findNodeForLink(const std::string& link_name) {
+Ogre::SceneNode* URDFRendererPlugin::findNodeForLink(const std::string& link_name) {
     auto it = link_nodes_.find(link_name);
     return (it != link_nodes_.end()) ? it->second : nullptr;
 }

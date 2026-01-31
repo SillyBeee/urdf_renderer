@@ -2,7 +2,7 @@
  * @file urdf_loader.hpp
  * @brief URDF模型加载器
  * @details 提供URDF文件解析、网格路径解析、关节角度管理等功能
- * @author GitHub Copilot CLI
+ * @author SillyBee
  * @date 2026-01-31
  */
 

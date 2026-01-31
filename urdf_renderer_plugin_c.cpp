@@ -1,10 +1,10 @@
-#include "urdf_viewer_plugin.h"
-#include "urdf_viewer_plugin.hpp"
+#include "urdf_renderer_plugin.h"
+#include "urdf_renderer_plugin.hpp"
 #include <cstring>
 
 // Internal context structure
 struct UrdfPluginContext {
-    URDFViewerPlugin* plugin;
+    URDFRendererPlugin* plugin;
 };
 
 // ============================================================================
@@ -14,7 +14,7 @@ struct UrdfPluginContext {
 UrdfPluginHandle urdf_plugin_create(const UrdfRenderConfig* render_config) {
     try {
         auto* context = new UrdfPluginContext();
-        context->plugin = new URDFViewerPlugin();
+        context->plugin = new URDFRendererPlugin();
         
         if (!context->plugin->initialize(render_config)) {
             delete context->plugin;

@@ -1,4 +1,4 @@
-# URDF Viewer Plugin - 使用说明
+# URDF Renderer Plugin - 使用说明
 
 ## ✅ 已实现功能
 
@@ -14,15 +14,15 @@
 ## 📦 构建
 
 ```bash
-cd /home/ma/桌面/urdf_viewer
+cd /home/ma/桌面/urdf_renderer
 mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
 ```
 
 生成的文件：
-- `liburdf_viewer_plugin.so` - 共享库插件
-- `urdf_viewer` - 原始独立可执行文件
+- `liburdf_renderer_plugin.so` - 共享库插件
+- `urdf_renderer` - 原始独立可执行文件
 - `example_c` - C语言示例程序
 - `video_generator` - 视频/动画生成工具
 - `example_opencv` - OpenCV集成示例（需要OpenCV）
@@ -37,9 +37,9 @@ make -j$(nproc)
 
 ### C++ API
 ```cpp
-#include "urdf_viewer_plugin.hpp"
+#include "urdf_renderer_plugin.hpp"
 
-auto plugin = std::make_unique<URDFViewerPlugin>();
+auto plugin = std::make_unique<URDFRendererPlugin>();
 plugin->initialize(&config);
 plugin->loadURDF("robot.urdf");
 plugin->renderFrame();
@@ -106,7 +106,7 @@ ffmpeg -framerate 30 -i frame_%04d.ppm -c:v libx264 -pix_fmt yuv420p robot_anima
 
 ### 基本渲染
 ```c
-#include "urdf_viewer_plugin.h"
+#include "urdf_renderer_plugin.h"
 
 // 创建插件（800x600，透明背景）
 UrdfRenderConfig config = {800, 600, true, {0,0,0,0}, 0};
@@ -245,3 +245,6 @@ extern "C" {
 - assimp
 - pthreads
 
+## 👨‍💻 作者
+
+Created with GitHub Copilot CLI

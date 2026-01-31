@@ -1,6 +1,6 @@
 /**
  * @file example_opencv.cpp
- * @brief URDF Viewer Plugin OpenCV集成示例
+ * @brief URDF Renderer Plugin OpenCV集成示例
  * @details 演示如何使用getImageAsMat()获取cv::Mat格式的渲染图像，
  *          并使用OpenCV进行图像处理和保存。
  * 
@@ -8,7 +8,7 @@
  * 运行：./example_opencv <urdf_path>
  */
 
-#include "urdf_viewer_plugin.hpp"
+#include "urdf_renderer_plugin.hpp"
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -24,12 +24,12 @@ int main(int argc, char** argv) {
 
     std::string urdf_path = argv[1];
     
-    std::cout << "=== URDF Viewer Plugin - OpenCV集成示例 ===" << std::endl;
+    std::cout << "=== URDF Renderer Plugin - OpenCV集成示例 ===" << std::endl;
     std::cout << std::endl;
 
     // 1. 创建插件实例
     std::cout << "1. 创建插件上下文..." << std::endl;
-    auto plugin = std::make_unique<URDFViewerPlugin>();
+    auto plugin = std::make_unique<URDFRendererPlugin>();
     
     // 2. 初始化插件
     UrdfRenderConfig render_config;
@@ -54,17 +54,17 @@ int main(int argc, char** argv) {
     size_t joint_count = plugin->getJointCount();
     std::cout << "   ✓ 加载成功，关节数: " << joint_count << std::endl;
 
-    // 4. 设置相机
+    // 4. 设置相机（优化视角，机械臂充满画面）
     std::cout << "\n3. 设置相机参数..." << std::endl;
     UrdfCameraConfig camera;
-    camera.position[0] = 2.5f; camera.position[1] = 2.5f; camera.position[2] = 2.0f;
-    camera.look_at[0] = 0.0f; camera.look_at[1] = 0.0f; camera.look_at[2] = 0.5f;
+    camera.position[0] = -0.02f; camera.position[1] = 0.0f; camera.position[2] = 1.5f;
+    camera.look_at[0] = 0.0f; camera.look_at[1] = 0.1f; camera.look_at[2] = 0.9f;
     camera.up[0] = 0.0f; camera.up[1] = 0.0f; camera.up[2] = 1.0f;
-    camera.fov_degrees = 45.0f;
-    camera.near_clip = 0.1f;
-    camera.far_clip = 100.0f;
+    camera.fov_degrees = 22.0f;  // 进一步收窄FOV
+    camera.near_clip = 0.02f;
+    camera.far_clip = 5.0f;
     plugin->setCamera(camera);
-    std::cout << "   ✓ 相机设置完成" << std::endl;
+    std::cout << "   ✓ 相机设置完成（机械臂充满画面模式）" << std::endl;
 
     // 5. 渲染初始姿态并保存（RGBA格式）
     std::cout << "\n4. 渲染初始姿态..." << std::endl;

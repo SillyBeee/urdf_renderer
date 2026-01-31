@@ -1,6 +1,6 @@
 /**
- * @file urdf_viewer_plugin.h
- * @brief URDF查看器插件C语言API接口
+ * @file urdf_renderer_plugin.h
+ * @brief URDF渲染器插件C语言API接口
  * @details 提供用于Slint或其他语言通过FFI调用的C接口。
  *          支持URDF模型加载、渲染、关节控制、图像导出等功能。
  * @author SillyBee
@@ -30,8 +30,8 @@
  * @endcode
  */
 
-#ifndef URDF_VIEWER_PLUGIN_H
-#define URDF_VIEWER_PLUGIN_H
+#ifndef URDF_RENDERER_PLUGIN_H
+#define URDF_RENDERER_PLUGIN_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -551,4 +551,4 @@ URDF_PLUGIN_API UrdfPluginError urdf_plugin_copy_image_buffer(
 }
 #endif
 
-#endif // URDF_VIEWER_PLUGIN_H
+#endif // URDF_RENDERER_PLUGIN_H
