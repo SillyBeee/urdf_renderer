@@ -1,12 +1,12 @@
+#include "urdf_loader.hpp"
 #include "ogre_viewer.cpp"
-#include "urdf_loader.cpp"
-int main() {
-    OgreApp app;
-    app.run();
-    URDFLoader loader;
-    loader.load("path/to/your/urdf/file.urdf");
-    
-    return 0;
 
-    
+int main() {
+    URDFLoader loader;
+    if (!loader.load("path/to/your/urdf/file.urdf")) {
+        return 1;
+    }
+    OgreApp app(loader);
+    app.run();
+    return 0;
 }
